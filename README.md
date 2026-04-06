@@ -1,8 +1,8 @@
-# Báo cáo: Kiến trúc Cây (Trees Architecture) trong Flutter
+# Report: Kiến trúc Cây (Trees Architecture) trong Flutter
 
 ## 1. Giới thiệu tổng quan
 
-Trong Flutter, giao diện người dùng (UI) không chỉ được tạo nên bởi một "cây" duy nhất, mà thực chất có tới **3 cây (Trees)** hoạt động song song với nhau để đảm bảo hiệu suất kết xuất (rendering) cao cấp. Ba cây này là:
+Trong **Declarative UI paradigm (Mô hình giao diện khai báo)** của Flutter, giao diện người dùng (UI) không chỉ được tạo nên bởi một "cây" duy nhất. Thực chất, Flutter vận hành một hệ thống gồm **3 cây (Trees)** hoạt động song song để đảm bảo hiệu suất kết xuất (rendering) cao cấp ở mức 60-120fps. Ba cây này là:
 
 - **Widget Tree** (Cây Widget)
 - **Element Tree** (Cây Element)
@@ -12,39 +12,42 @@ Trong Flutter, giao diện người dùng (UI) không chỉ được tạo nên 
 
 ### A. Widget Tree (Cây cấu hình)
 
-- **Định nghĩa**: Là nơi chứa cấu hình UI do lập trình viên khai báo. Nó mô tả UI trông như thế nào ở một thời điểm nhất định. Widget là "bản thiết kế" (blueprint) của giao diện.
+- **Định nghĩa**: Là nơi chứa **Configuration (cấu hình)** UI do lập trình viên khai báo. Nó mô tả UI trông như thế nào ở một thời điểm nhất định (state). Widget thực chất chỉ là một **Blueprint (bản thiết kế)** hay **Data class** đơn thuần.
 - **Đặc điểm**:
-  - **Bất biến (Immutable)**: Không thể thay đổi các thuộc tính sau khi đã khởi tạo. Khi trạng thái (state) thay đổi, Flutter sẽ tạo ra một cây Widget hoàn toàn mới.
-  - **Nhẹ (Lightweight)**: Việc tạo đi tạo lại hàng ngàn Widget cực kỳ nhanh và rẻ về mặt tài nguyên vì chúng chỉ là các objects mô tả trạng thái, không chứa code hiển thị tốn phần cứng.
+  - **Immutable (Bất biến)**: Không thể thay đổi các thuộc tính sau khi đã khởi tạo (`@immutable`). Bất cứ khi nào **State** thay đổi, Flutter sẽ phá hủy và tạo ra một Widget Tree hoàn toàn mới.
+  - **Lightweight (Siêu nhẹ)**: Việc tạo đi tạo lại hàng ngàn đối tượng Widget cực kỳ nhanh và chi phí thấp, vì chúng không chứa các mã vẽ (painting code) hay tính toán bố cục tiêu tốn tài nguyên.
 
-### B. Element Tree (Cây quản lý - Người định tuyến)
+### B. Element Tree (Cây quản lý - Người điều phối)
 
-- **Định nghĩa**: Là cầu nối giao tiếp giữa Widget và RenderObject. Khi Flutter lấy một Widget để vẽ lên màn hình, nó sẽ khởi tạo và quản lý một Element tương ứng.
+- **Định nghĩa**: Là bản thể hiện thực hoá (Instantiation) của Widget, đóng vai trò cầu nối giao tiếp giữa Widget và RenderObject. Đáng chú ý, đối tượng **`BuildContext`** mà lập trình viên thường dùng ở tham số hàm `build()` chính là interface hiển thị ra của một `Element` tại vị trí đó trên cây.
 - **Đặc điểm**:
-  - **Có thể biến đổi (Mutable)**: Không giống như Widget, Element tồn tại lâu dài trên bộ nhớ và giữ các tham chiếu (reference) đến một Widget và một RenderObject.
-  - **Quản lý State và Lifecycle**: Lưu trữ State của các StatefulWidget. Khi một Widget thay thế một Widget cũ trên cây (nhưng vẫn cùng kiểu và cùng `Key`), Element không bị huỷ đi mà chỉ thay đổi tham chiếu trỏ sang Widget mới.
-  - **So sánh (Diffing / Reconciliation)**: Element Tree đảm nhận nhiệm vụ so sánh (diffing) cây Widget hiện trạng và cây Widget mới để biết được chính xác phần nào cần phải cập nhật, giúp hệ thống không phải khởi tạo lại từ đầu.
+  - **Mutable (Có thể biến đổi)**: Không giống như Widget, Element tồn tại lâu dài trên bộ nhớ và giữ **References (tham chiếu)** tới cả Widget (cấu hình hiện tại) và RenderObject (bản vẽ hiển thị).
+  - **State and Lifecycle Management**: Lưu trữ và quản lý `State` (đối với StatefulWidget). Khi Widget Tree xây mới, Element Tree không bị bẻ gãy. Nó sử dụng cơ chế **Diffing / Reconciliation (Thuật toán đối soát)** để so sánh Widget mới và cũ dựa trên `runtimeType` và `Key`.
+  - Nếu `runtimeType` và `Key` khớp nhau, Element tiếp tục giữ nguyên `State` mà chỉ đơn giản là cập nhật tham chiếu sang vùng nhớ của Widget phiên bản mới.
 
 ### C. RenderObject Tree (Cây hiển thị)
 
-- **Định nghĩa**: Cây này thực hiện mọi công việc nặng nhọc: tính toán không gian, kích thước (Layout), vẽ các pixels ra màn hình (Painting) và xử lý sự kiện chạm của người dùng (Hit-testing - Cảm ứng).
+- **Định nghĩa**: Là cấu trúc dữ liệu nền tảng thực hiện mọi công việc tính toán nặng nhọc: **Layout (tính toán không gian, kích thước)**, **Painting (vẽ các pixels)** ra màn hình và **Hit-testing (cảm biến sự kiện chạm)**.
 - **Đặc điểm**:
-  - **Nặng (Heavyweight)**: Việc khởi tạo và tính toán RenderObject khá tiêu tốn CPU/GPU.
-  - **Được tối ưu hoá**: Nhờ định tuyến của Element Tree, các RenderObject được tái sử dụng tối đa. Thay vì xoá và tạo lại RenderObject, Element sẽ điều hướng để cập nhật lại những tham số mà thôi (như đổi màu khối, căn lề,...).
+  - **Heavyweight (Rất nặng)**: Việc khởi tạo và tính toán RenderObject rất phức tạp và tiêu tốn tài nguyên thiết bị di động (CPU/GPU).
+  - **Tối ưu hoá cao độ**: Nhờ thuật toán đối soát của Element Tree, RenderObject hiếm khi bị dỡ bỏ. Nó chỉ thay đổi thuộc tính (mutate internal properties) khi Element ra lệnh.
+  - **Quy tắc cốt lõi (Layout Protocol)**: Áp dụng quy tắc vàng nguyên thủy của nền tảng UI Flutter: *"Constraints go down. Sizes go up. Parent sets position."* (Các giới hạn ràng buộc không gian đi xuống, kích thước ước lượng đi lên báo lại, và Widget cha quyết định toạ độ kết xuất của con).
 
 ## 3. Vòng luân chuyển (Lifecycle Workflow)
 
-1. **Khởi tạo**: Lập trình viên viết code khai báo tạo cấu trúc (Widget Tree).
-2. **Mount**: Flutter duyệt qua Widget Tree, ứng với mỗi Widget, sẽ tạo ra một Node quản lý trên Element Tree.
-3. **Render**: Các Element sẽ ra lệnh tạo ra một Node trên RenderObject Tree làm nhiệm vụ vẽ các chi tiết của Element đó lên màn hình.
-4. **Update (khi `setState` được gọi):**
-   - Lập trình viên thay đổi số hoặc thông tin cấu hình -> Flutter dựng ra các lớp Widget Tree mới toanh.
-   - Element Tree đối chiếu lớp Widget cũ và Widget mới. Nếu nó thấy loại (type) và khoá (key) ở cùng một vị trí vẫn giống nhau, Element giữ nguyên mạng lưới gốc rễ.
-   - Thay vì vứt bỏ cục RenderObject, Element Tree nạp thông số cấu hình mới đó vào cục RenderObject hiện tại có sẵn, RenderObject chỉ điều chỉnh một chút và vẽ frame mới.
+1. **Initialization (Khởi tạo)**: Hàm `runApp()` tiếp nhận Widget gốc của bạn.
+2. **Mounting (Gắn kết)**: Flutter duyệt qua Widget Tree. Ứng với mỗi Widget, phương thức `createElement()` được gọi ra để sinh ra một Node trên Element Tree nhằm theo dõi Widget đó.
+3. **Rendering & Painting**: Khi một Element được Mount, nếu Widget tương ứng của nó thuộc nhánh `RenderObjectWidget`, nó sẽ kích hoạt `createRenderObject()` để sinh ra một Node trên RenderObject Tree làm nhiệm vụ phân tích đo đạc màn hình và vẽ.
+4. **Rebuilding (Khi `setState` được gọi)**:
+   - Các cấu hình Model bị thay đổi làm cho phương thức `build()` chạy lại sinh ra một mạng lưới Widget Tree mới cho khu vực đó.
+   - Quá trình **Reconciliation** kích hoạt, Element Tree sẽ bước vào quá trình traverse (duyệt) và so sánh cây Widget mới với thông tin cũ đã lưu (tương tự như React Virtual DOM).
+   - Nếu phát hiện thuộc tính (color, padding...) thay đổi, Element gọi hàm `updateRenderObject()` để gán các thuộc tính mới vào RenderObject. RenderObject lập tức tự gán nhãn là **dirty (bẩn)** để chờ tính toán vẽ lại khung hình (**Next Frame**) trên màn ảnh.
 
 ## 4. Tại sao lại cần tới 3 kiến trúc Cây?
 
-Kiến trúc 3 Trees cho phép Flutter đạt được một khả năng "hiếm có": Kết hợp sự thoải mái, linh hoạt, lập trình theo kiểu khai báo React (thích thay đổi, rebuild lại cả UI ở bất kỳ đâu) mà vẫn giữ được hiệu suất mượt mà **60-120 fps** (frame per second). Đó là nhờ sự hy sinh tự nguyên của cây Widget, vòng kìm hãm thông minh của cây Element và sự vất vả lâu bền của Cây RenderObject.
+Kiến trúc phân xử 3 lớp Trees cho phép Flutter đạt được khả năng kiến trúc toàn diện: Tận dụng trọn vẹn quy trình **Declarative, Reactive Programming** với tốc độ phát triển cực nhanh của React (thích thay đổi, rebuild lại toàn bộ UI ở bất kì sự kiện nào) nhưng vẫn duy trì đỉnh cao **High-Performance (hiệu suất trên 60fps)** mượt mà.
+
+Sự tự do này được trả giá bằng thiết kế bất biến giá rẻ của **Widget**, sự quản lý bền bỉ thông qua phép tính so khớp (diffing) của **Element**, và khối lượng tính toán vật lý không lãng phí của **RenderObject**.
 
 ## 5. UI dạng Cây (Tree View UI) & Thư viện liên quan
 
@@ -52,9 +55,9 @@ Kiến trúc 3 Trees cho phép Flutter đạt được một khả năng "hiếm
 
 Nếu bạn đang tìm cách tạo giao diện danh sách phân cấp (hierarchy list / folder views), bạn có thể dùng các package rất tối ưu sau:
 
-- [`flutter_fancy_tree_view`](https://pub.dev/packages/flutter_fancy_tree_view): Hỗ trợ cuộn ảo (Sliver) siêu mượt, rất mạnh mẽ để tải hàng trăng ngàn nodes nhánh.
-- [`tree_view_flutter`](https://pub.dev/packages/tree_view_flutter): Cung cấp các Tree view tùy biến, rất dễ sử dụng cho các form / list đơn giản.
-- Khai triển thủ công: Có thể viết logic đệ quy dùng `ListView.builder` kết hợp với `ExpansionTile`.
+- [`flutter_fancy_tree_view`](https://pub.dev/packages/flutter_fancy_tree_view): Hỗ trợ cơ chế **Virtual Scrolling (Sliver)** siêu mượt, với thuật toán tối ưu để tải hàng trăm ngàn Nodes rẽ nhánh mà không gây ngập bộ nhớ.
+- [`tree_view_flutter`](https://pub.dev/packages/tree_view_flutter): Cung cấp các Tree view dạng Component Widget tùy biến, rất dễ sử dụng API để làm menu điều hướng.
+- **Khai triển thủ công (Manual Implementation)**: Có thể dễ dàng tự tùy biến viết logic **Đệ quy (Recursive)** sử dụng `ListView.builder` kết hợp với `ExpansionTile` để làm giao diện thụt lề (Indentation level).
 
 ---
-*Báo cáo được tổng hợp tự động để hỗ trợ nghiên cứu kiến trúc hệ thống Flutter.*
+*Report được tổng hợp tự động để hỗ trợ nghiên cứu kiến trúc hệ thống Flutter.*
